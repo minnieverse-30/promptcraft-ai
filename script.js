@@ -1,7 +1,6 @@
 /* ==========================================
    PromptCraft AI
    Professional Script
-   PART 1 - Setup & Utilities
 ========================================== */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -114,7 +113,7 @@ document.addEventListener("DOMContentLoaded", () => {
         goalCounter.textContent = `${words} words • ${chars} characters`;
     }
 
-    goal.addEventListener("input", updateCounter);
+    if (goal) goal.addEventListener("input", updateCounter);
 
     // ==========================================
     // TOAST & LOADING
@@ -151,23 +150,22 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    themeToggle.addEventListener("click", () => {
-        document.body.classList.toggle("light-theme");
-        const light = document.body.classList.contains("light-theme");
-        themeToggle.textContent = light ? "☀️" : "🌙";
-        localStorage.setItem("theme", light ? "light" : "dark");
-        showToast(light ? "Light mode enabled" : "Dark mode enabled");
-    });
+    if (themeToggle) {
+        themeToggle.addEventListener("click", () => {
+            document.body.classList.toggle("light-theme");
+            const light = document.body.classList.contains("light-theme");
+            themeToggle.textContent = light ? "☀️" : "🌙";
+            localStorage.setItem("theme", light ? "light" : "dark");
+            showToast(light ? "Light mode enabled" : "Dark mode enabled");
+        });
+    }
 
     loadTheme();
     updateCounter();
 
     /* ==========================================
-       PART 2 - Gemini API & Prompt Generator
+       PART 2 - Vercel API & Prompt Generator
     ========================================== */
-
-    // ⚠️ WARNING: Hardcoding API keys in client-side code is a security risk in production.
-    const GEMINI_API_KEY = "YOUR_API_KEY_HERE"; 
 
     async function generateWithGemini(prompt) {
         const controller = new AbortController();
@@ -175,7 +173,7 @@ document.addEventListener("DOMContentLoaded", () => {
             controller.abort();
         }, 15000);
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+        const url = `/api/generate`;
 
         try {
             const response = await fetch(url, {
@@ -184,27 +182,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 headers: {
                     "Content-Type": "application/json"
                 },
-                body: JSON.stringify({
-                    contents: [{
-                        parts: [{
-                            text: prompt
-                        }]
-                    }]
-                })
+                body: JSON.stringify({ prompt: prompt })
             });
 
             clearTimeout(timeout);
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error?.message || "Gemini API request failed.");
+                throw new Error(data.error || "Backend API request failed.");
             }
 
-            if (!data.candidates || !data.candidates.length || !data.candidates[0].content || !data.candidates[0].content.parts) {
-                throw new Error("No response received from Gemini.");
-            }
-
-            return data.candidates[0].content.parts[0].text;
+            return data.text;
 
         } catch (error) {
             clearTimeout(timeout);
@@ -215,7 +203,9 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    async function generatePrompt() {
+    async function generatePrompt(e) {
+        if (e) e.preventDefault(); // Prevent form submission if inside a form
+
         const selectedCategory = category.value;
         const userGoal = goal.value.trim();
 
@@ -250,10 +240,10 @@ document.addEventListener("DOMContentLoaded", () => {
             metaWords.textContent = aiResponse.trim().split(/\s+/).length;
             metaCharacters.textContent = aiResponse.length;
 
-            copyBtn.disabled = false;
-            copyOutputBtn.disabled = false;
-            downloadTXT.disabled = false;
-            downloadMD.disabled = false;
+            if (copyBtn) copyBtn.disabled = false;
+            if (copyOutputBtn) copyOutputBtn.disabled = false;
+            if (downloadTXT) downloadTXT.disabled = false;
+            if (downloadMD) downloadMD.disabled = false;
 
             promptHistory.unshift({
                 category: selectedCategory,
@@ -283,7 +273,6 @@ document.addEventListener("DOMContentLoaded", () => {
         generateBtn.addEventListener("click", generatePrompt);
     }
 
-
     /* ==========================================
        PART 3 - Copy, Download & Clear
     ========================================== */
@@ -310,32 +299,166 @@ document.addEventListener("DOMContentLoaded", () => {
             });
     }
 
-    copyBtn.addEventListener("click", copyGeneratedPrompt);
-    copyOutputBtn.addEventListener("click", copyGeneratedPrompt);
+    if (copyBtn) copyBtn.addEventListener("click", copyGeneratedPrompt);
+    if (copyOutputBtn) copyOutputBtn.addEventListener("click", copyGeneratedPrompt);
 
-    downloadTXT.addEventListener("click", () => {
-        const text = getLatestAIResponse();
-        if (text === "" || text.includes("⏳ Typing...")) {
-            showToast("Generate a prompt first.");
-            return;
+    if (downloadTXT) {
+        downloadTXT.addEventListener("click", () => {
+            const text = getLatestAIResponse();
+            if (text === "" || text.includes("⏳ Typing...")) {
+                showToast("Generate a prompt first.");
+                return;
+            }
+
+            const blob = new Blob([text], { type: "text/plain" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "PromptCraft-Prompt.txt";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+            showToast("TXT downloaded ⬇");
+        });
+    }
+
+    if (downloadMD) {
+        downloadMD.addEventListener("click", () => {
+            const text = getLatestAIResponse();
+            if (text === "" || text.includes("⏳ Typing...")) {
+                showToast("Generate a prompt first.");
+                return;
+            }
+
+            const blob = new Blob(["# PromptCraft AI\n\n" + text], { type: "text/markdown" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "PromptCraft-Prompt.md";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+            showToast("Markdown downloaded 📝");
+        });
+    }
+
+    function clearAll() {
+        category.selectedIndex = 0;
+        goal.value = "";
+        updateCounter();
+
+        chatContainer.innerHTML = `
+            <div class="ai-message">
+                <div class="message-header">🤖 PromptCraft AI</div>
+                <div class="message-body">Welcome! I'm PromptCraft AI. Ask me anything to get started.</div>
+            </div>
+        `;
+
+        metaCategory.textContent = "—";
+        metaWords.textContent = "0";
+        metaCharacters.textContent = "0";
+        goalCounter.textContent = "0 words • 0 characters";
+
+        if (copyBtn) copyBtn.disabled = true;
+        if (copyOutputBtn) copyOutputBtn.disabled = true;
+        if (downloadTXT) downloadTXT.disabled = true;
+        if (downloadMD) downloadMD.disabled = true;
+
+        showToast("Workspace cleared 🗑");
+        goal.focus();
+    }
+
+    if (clearBtn) clearBtn.addEventListener("click", clearAll);
+
+    // Disable download initially
+    if (downloadTXT) downloadTXT.disabled = true;
+    if (downloadMD) downloadMD.disabled = true;
+
+    // Welcome Toast
+    setTimeout(() => {
+        showToast("Welcome to PromptCraft AI 🚀");
+    }, 700);
+
+    /* ==========================================
+       PART 4 - Final Enhancements
+    ========================================== */
+
+    (function restoreLastPrompt() {
+        if (!promptHistory.length) return;
+        const last = promptHistory[0];
+
+        chatContainer.innerHTML = `
+            <div class="user-message">
+                <div class="message-header">👤 You</div>
+                <div class="message-body">${last.goal}</div>
+            </div>
+            <div class="ai-message">
+                <div class="message-header">🤖 PromptCraft AI</div>
+                <div class="message-body">${marked.parse(last.response || last.prompt)}</div>
+            </div>
+        `;
+
+        metaCategory.textContent = last.category.charAt(0).toUpperCase() + last.category.slice(1);
+        metaWords.textContent = (last.response || last.prompt).trim().split(/\s+/).length;
+        metaCharacters.textContent = (last.response || last.prompt).length;
+
+        if (copyBtn) copyBtn.disabled = false;
+        if (copyOutputBtn) copyOutputBtn.disabled = false;
+        if (downloadTXT) downloadTXT.disabled = false;
+        if (downloadMD) downloadMD.disabled = false;
+    })();
+
+    // Auto Resize Textarea
+    if (goal) {
+        goal.addEventListener("input", () => {
+            goal.style.height = "auto";
+            goal.style.height = goal.scrollHeight + "px";
+        });
+
+        // Prevent Empty Spaces
+        goal.addEventListener("blur", () => {
+            goal.value = goal.value.trim();
+        });
+    }
+
+    // Keyboard Shortcuts
+    document.addEventListener("keydown", (e) => {
+        // Ctrl + Enter = Generate Prompt
+        if (e.ctrlKey && e.key === "Enter") {
+            e.preventDefault();
+            generatePrompt();
         }
 
-        const blob = new Blob([text], { type: "text/plain" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = "PromptCraft-Prompt.txt";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(link.href);
-        showToast("TXT downloaded ⬇");
+        // Ctrl + L = Clear
+        if (e.ctrlKey && e.key.toLowerCase() === "l") {
+            e.preventDefault();
+            clearAll();
+        }
+
+        // Ctrl + Shift + C = Copy
+        if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "c") {
+            e.preventDefault();
+            copyGeneratedPrompt();
+        }
     });
 
-    downloadMD.addEventListener("click", () => {
-        const text = getLatestAIResponse();
-        if (text === "" || text.includes("⏳ Typing...")) {
-            showToast("Generate a prompt first.");
-            return;
-        }
+    // Smooth Button Animation
+    document.querySelectorAll(".btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            btn.animate([
+                { transform: "scale(1)" },
+                { transform: "scale(.96)" },
+                { transform: "scale(1)" }
+            ], { duration: 180 });
+        });
+    });
 
-        const blob = new Blob(["# PromptCraft AI\n\n
+    // Footer Year
+    const yearElement = document.querySelector(".footer-bottom p");
+    if (yearElement) {
+        yearElement.innerHTML = `© ${new Date().getFullYear()} PromptCraft AI. All rights reserved.`;
+    }
+
+    hideLoading();
+    console.log("PromptCraft AI Loaded Successfully 🚀");
+});
