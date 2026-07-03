@@ -175,29 +175,30 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const url = `/api/generate`;
 
-        try {
-            const response = await fetch(url, {
-                method: "POST",
-                signal: controller.signal,
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ prompt: prompt })
-            });
+try {
+    const response = await fetch(url, {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ prompt })
+    });
 
-            clearTimeout(timeout);
-            const data = await response.json();
+    clearTimeout(timeout);
+
+    const data = await response.json();
 
     if (!response.ok) {
 
-    if (response.status === 429) {
-        throw new Error("🚫 Gemini free API quota exceeded. Please try again later.");
+        if (response.status === 429) {
+            throw new Error("🚫 Gemini free API quota exceeded. Please try again later.");
+        }
+
+        throw new Error(data.error || `Server Error (${response.status})`);
     }
 
-    throw new Error(data.error || `Server Error (${response.status})`);
-}
-
-            return data.text;
+    return data.text;
 
 } catch (error) {
 
@@ -213,7 +214,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     throw error;
 }
-
     async function generatePrompt(e) {
         if (e) e.preventDefault(); // Prevent form submission if inside a form
 
