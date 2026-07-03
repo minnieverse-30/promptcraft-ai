@@ -188,20 +188,31 @@ document.addEventListener("DOMContentLoaded", () => {
             clearTimeout(timeout);
             const data = await response.json();
 
-            if (!response.ok) {
-                throw new Error(data.error || "Backend API request failed.");
-            }
+    if (!response.ok) {
+
+    if (response.status === 429) {
+        throw new Error("🚫 Gemini free API quota exceeded. Please try again later.");
+    }
+
+    throw new Error(data.error || `Server Error (${response.status})`);
+}
 
             return data.text;
 
-        } catch (error) {
-            clearTimeout(timeout);
-            if (error.name === "AbortError") {
-                throw new Error("Request timed out. Please try again.");
-            }
-            throw error;
-        }
+} catch (error) {
+
+    clearTimeout(timeout);
+
+    if (error.name === "AbortError") {
+        throw new Error("Request timed out. Please try again.");
     }
+
+    if (error.message.includes("Quota")) {
+        throw new Error("🚫 Gemini API free limit reached. Wait for the quota to reset or use another API key.");
+    }
+
+    throw error;
+}
 
     async function generatePrompt(e) {
         if (e) e.preventDefault(); // Prevent form submission if inside a form
