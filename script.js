@@ -1,0 +1,341 @@
+/* ==========================================
+   PromptCraft AI
+   Professional Script
+   PART 1 - Setup & Utilities
+========================================== */
+
+document.addEventListener("DOMContentLoaded", () => {
+
+    // ==========================================
+    // ELEMENTS
+    // ==========================================
+
+    const category = document.getElementById("prompt-category");
+    const goal = document.getElementById("user-goal");
+
+    const generateBtn = document.getElementById("generate-btn");
+    const copyBtn = document.getElementById("copy-btn");
+    const copyOutputBtn = document.getElementById("copy-builder-btn");
+    const clearBtn = document.getElementById("clear-btn");
+
+    const metaCategory = document.getElementById("meta-category");
+    const metaWords = document.getElementById("meta-words");
+    const metaCharacters = document.getElementById("meta-characters");
+
+    const goalCounter = document.getElementById("goal-counter");
+
+    const downloadTXT = document.getElementById("download-txt-btn");
+    const downloadMD = document.getElementById("download-md-btn");
+
+    const themeToggle = document.getElementById("theme-toggle");
+    const loading = document.getElementById("loading");
+    const toast = document.getElementById("toast");
+    const toastMessage = document.getElementById("toast-message");
+    const chatContainer = document.getElementById("chat-container");
+
+    // ===============================
+    // CHAT FUNCTIONS
+    // ===============================
+
+    function addUserMessage(text) {
+        const message = document.createElement("div");
+        message.className = "user-message";
+        message.innerHTML = `
+            <div class="message-header">👤 You</div>
+            <div class="message-body">${text}</div>
+        `;
+        chatContainer.appendChild(message);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    function addAIMessage(text) {
+        const message = document.createElement("div");
+        message.className = "ai-message";
+        message.innerHTML = `
+            <div class="message-header">🤖 PromptCraft AI</div>
+            <div class="message-body">${marked.parse(text)}</div>
+        `;
+        chatContainer.appendChild(message);
+
+        message.querySelectorAll("pre code").forEach((block) => {
+            hljs.highlightElement(block);
+        });
+
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    function addTypingMessage() {
+        const message = document.createElement("div");
+        message.className = "ai-message";
+        message.id = "typing-message";
+        message.innerHTML = `
+            <div class="message-header">🤖 PromptCraft AI</div>
+            <div class="message-body">⏳ Typing...</div>
+        `;
+        chatContainer.appendChild(message);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    function removeTypingMessage() {
+        const typing = document.getElementById("typing-message");
+        if (typing) {
+            typing.remove();
+        }
+    }
+
+    // ==========================================
+    // LOCAL STORAGE
+    // ==========================================
+
+    let promptHistory = JSON.parse(localStorage.getItem("promptHistory")) || [];
+
+    // ==========================================
+    // PROMPT TEMPLATES
+    // ==========================================
+
+    const templates = {
+        coding: `You are a Senior Software Engineer.\n\nTask:\n{goal}\n\nRequirements:\n• Think step by step\n• Production-ready code\n• Modern best practices\n• Responsive design\n• Error handling\n• Comments where needed\n\nOutput:\nComplete solution.`,
+        writing: `You are a Professional Writer.\n\nTask:\n{goal}\n\nRequirements:\n• Engaging tone\n• Clear headings\n• Proper grammar\n• Well-structured\n• Strong conclusion\n\nOutput:\nProfessional content.`,
+        study: `You are an Expert Teacher.\n\nTask:\n{goal}\n\nRequirements:\n• Easy explanation\n• Examples\n• Important points\n• Quiz\n• Summary\n\nOutput:\nComplete lesson.`,
+        marketing: `You are a Marketing Strategist.\n\nTask:\n{goal}\n\nRequirements:\n• Target audience\n• Marketing strategy\n• CTA\n• SEO\n• Social media ideas\n\nOutput:\nMarketing plan.`,
+        business: `You are a Business Consultant.\n\nTask:\n{goal}\n\nRequirements:\n• SWOT\n• Opportunities\n• Risks\n• Recommendations\n• Action plan\n\nOutput:\nBusiness report.`,
+        email: `You are a Professional Email Writer.\n\nTask:\n{goal}\n\nRequirements:\n• Subject\n• Greeting\n• Professional tone\n• Closing\n\nOutput:\nReady-to-send email.`,
+        image: `You are an AI Prompt Engineer.\n\nTask:\n{goal}\n\nRequirements:\n• Subject\n• Style\n• Lighting\n• Camera\n• Composition\n• Quality\n• Background\n\nOutput:\nDetailed image prompt.`
+    };
+
+    // ==========================================
+    // WORD COUNTER
+    // ==========================================
+
+    function updateCounter() {
+        const text = goal.value.trim();
+        const words = text === "" ? 0 : text.split(/\s+/).length;
+        const chars = goal.value.length;
+        goalCounter.textContent = `${words} words • ${chars} characters`;
+    }
+
+    goal.addEventListener("input", updateCounter);
+
+    // ==========================================
+    // TOAST & LOADING
+    // ==========================================
+
+    function showToast(message) {
+        toastMessage.textContent = message;
+        toast.classList.add("show");
+        setTimeout(() => {
+            toast.classList.remove("show");
+        }, 2500);
+    }
+
+    function showLoading() {
+        loading.style.display = "flex";
+    }
+
+    function hideLoading() {
+        loading.style.display = "none";
+    }
+
+    // ==========================================
+    // THEME
+    // ==========================================
+
+    function loadTheme() {
+        const saved = localStorage.getItem("theme");
+        if (saved === "light") {
+            document.body.classList.add("light-theme");
+            themeToggle.textContent = "☀️";
+        } else {
+            document.body.classList.remove("light-theme");
+            themeToggle.textContent = "🌙";
+        }
+    }
+
+    themeToggle.addEventListener("click", () => {
+        document.body.classList.toggle("light-theme");
+        const light = document.body.classList.contains("light-theme");
+        themeToggle.textContent = light ? "☀️" : "🌙";
+        localStorage.setItem("theme", light ? "light" : "dark");
+        showToast(light ? "Light mode enabled" : "Dark mode enabled");
+    });
+
+    loadTheme();
+    updateCounter();
+
+    /* ==========================================
+       PART 2 - Gemini API & Prompt Generator
+    ========================================== */
+
+    // ⚠️ WARNING: Hardcoding API keys in client-side code is a security risk in production.
+    const GEMINI_API_KEY = "YOUR_API_KEY_HERE"; 
+
+    async function generateWithGemini(prompt) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => {
+            controller.abort();
+        }, 15000);
+
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+        try {
+            const response = await fetch(url, {
+                method: "POST",
+                signal: controller.signal,
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{
+                            text: prompt
+                        }]
+                    }]
+                })
+            });
+
+            clearTimeout(timeout);
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error?.message || "Gemini API request failed.");
+            }
+
+            if (!data.candidates || !data.candidates.length || !data.candidates[0].content || !data.candidates[0].content.parts) {
+                throw new Error("No response received from Gemini.");
+            }
+
+            return data.candidates[0].content.parts[0].text;
+
+        } catch (error) {
+            clearTimeout(timeout);
+            if (error.name === "AbortError") {
+                throw new Error("Request timed out. Please try again.");
+            }
+            throw error;
+        }
+    }
+
+    async function generatePrompt() {
+        const selectedCategory = category.value;
+        const userGoal = goal.value.trim();
+
+        if (!selectedCategory) {
+            showToast("Please select a category.");
+            category.focus();
+            return;
+        }
+
+        if (!userGoal) {
+            showToast("Please describe your goal.");
+            goal.focus();
+            return;
+        }
+
+        const template = templates[selectedCategory];
+        const finalPrompt = template.replace("{goal}", userGoal);
+
+        addUserMessage(userGoal);
+        addTypingMessage();
+        showLoading();
+        
+        if (generateBtn) generateBtn.disabled = true;
+
+        try {
+            const aiResponse = await generateWithGemini(finalPrompt);
+
+            removeTypingMessage();
+            addAIMessage(aiResponse);
+
+            metaCategory.textContent = selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1);
+            metaWords.textContent = aiResponse.trim().split(/\s+/).length;
+            metaCharacters.textContent = aiResponse.length;
+
+            copyBtn.disabled = false;
+            copyOutputBtn.disabled = false;
+            downloadTXT.disabled = false;
+            downloadMD.disabled = false;
+
+            promptHistory.unshift({
+                category: selectedCategory,
+                goal: userGoal,
+                prompt: finalPrompt,
+                response: aiResponse
+            });
+
+            if (promptHistory.length > 10) promptHistory.pop();
+            localStorage.setItem("promptHistory", JSON.stringify(promptHistory));
+
+            showToast("Prompt generated successfully ✨");
+
+        } catch (error) {
+            removeTypingMessage();
+            addAIMessage(`**Error:** ${error.message}`);
+            showToast("Failed to generate prompt.");
+        } finally {
+            hideLoading();
+            if (generateBtn) generateBtn.disabled = false;
+            goal.value = ""; 
+            updateCounter();
+        }
+    }
+
+    if (generateBtn) {
+        generateBtn.addEventListener("click", generatePrompt);
+    }
+
+
+    /* ==========================================
+       PART 3 - Copy, Download & Clear
+    ========================================== */
+
+    function getLatestAIResponse() {
+        const messages = document.querySelectorAll(".ai-message .message-body");
+        if (!messages.length) return "";
+        return messages[messages.length - 1].innerText.trim();
+    }
+
+    function copyGeneratedPrompt() {
+        const text = getLatestAIResponse();
+        if (text === "" || text === "Your generated prompt will appear here..." || text === "⏳ Typing...") {
+            showToast("Nothing to copy.");
+            return;
+        }
+
+        navigator.clipboard.writeText(text)
+            .then(() => {
+                showToast("Prompt copied to clipboard 📋");
+            })
+            .catch(() => {
+                showToast("Copy failed.");
+            });
+    }
+
+    copyBtn.addEventListener("click", copyGeneratedPrompt);
+    copyOutputBtn.addEventListener("click", copyGeneratedPrompt);
+
+    downloadTXT.addEventListener("click", () => {
+        const text = getLatestAIResponse();
+        if (text === "" || text.includes("⏳ Typing...")) {
+            showToast("Generate a prompt first.");
+            return;
+        }
+
+        const blob = new Blob([text], { type: "text/plain" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "PromptCraft-Prompt.txt";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+        showToast("TXT downloaded ⬇");
+    });
+
+    downloadMD.addEventListener("click", () => {
+        const text = getLatestAIResponse();
+        if (text === "" || text.includes("⏳ Typing...")) {
+            showToast("Generate a prompt first.");
+            return;
+        }
+
+        const blob = new Blob(["# PromptCraft AI\n\n
