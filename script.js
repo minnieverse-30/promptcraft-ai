@@ -171,7 +171,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const controller = new AbortController();
         const timeout = setTimeout(() => {
             controller.abort();
-        }, 15000);
+        }, 30000);
 
         const url = `/api/generate`;
 
@@ -214,6 +214,9 @@ try {
 
     throw error;
 }
+
+}
+   
     async function generatePrompt(e) {
         if (e) e.preventDefault(); // Prevent form submission if inside a form
 
